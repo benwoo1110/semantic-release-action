@@ -129,6 +129,13 @@ class Version {
         }
         return `${this.major}.${this.minor}.${this.patch}`
     }
+
+    toPublishVersion(): string {
+        if (this.isPreRelease()) {
+            return `${this.major}.${this.minor}.${this.patch}-SNAPSHOT`
+        }
+        return `${this.major}.${this.minor}.${this.patch}`
+    }
 }
 
 const inputs: Inputs = {
@@ -207,7 +214,7 @@ async function release(prerelease: boolean) {
 
     const newReleaseData: Release = await doRelease(nextVersion)
     core.info(`New release: ${JSON.stringify(newReleaseData)}`)
-    setReleaseOutputs(newReleaseData)
+    setReleaseOutputs(nextVersion, newReleaseData)
 }
 
 async function promote() {
@@ -428,9 +435,11 @@ async function doRelease(version: Version) {
     return release.data
 }
 
-async function setReleaseOutputs(releaseData: Release) {
+async function setReleaseOutputs(version: Version, releaseData: Release) {
     core.setOutput('release_created', true)
     core.setOutput('tag_name', releaseData.tag_name)
     core.setOutput('prerelease', releaseData.prerelease)
     core.setOutput('body', releaseData.body)
+    core.setOutput('publish_version', version.toPublishVersion())
+    core.setOutput('release_name', releaseData.prerelease ? 'beta' : 'release')
 }

@@ -91,6 +91,12 @@ class Version {
     }
     return `${this.major}.${this.minor}.${this.patch}`;
   }
+  toPublishVersion() {
+    if (this.isPreRelease()) {
+      return `${this.major}.${this.minor}.${this.patch}-SNAPSHOT`;
+    }
+    return `${this.major}.${this.minor}.${this.patch}`;
+  }
 }
 const inputs = {
   githubToken: core.getInput("github_token", { required: true }),
@@ -154,7 +160,7 @@ async function release(prerelease) {
   core.info(`Next version: ${nextVersion.toTag()}`);
   const newReleaseData = await doRelease(nextVersion);
   core.info(`New release: ${JSON.stringify(newReleaseData)}`);
-  setReleaseOutputs(newReleaseData);
+  setReleaseOutputs(nextVersion, newReleaseData);
 }
 async function promote() {
   const targetPrerelease = inputs.promoteFrom === "" ? await getLatestPrerelease() : await getReleaseFromTag(inputs.promoteFrom);
@@ -349,9 +355,11 @@ async function doRelease(version) {
   });
   return release2.data;
 }
-async function setReleaseOutputs(releaseData) {
+async function setReleaseOutputs(version, releaseData) {
   core.setOutput("release_created", true);
   core.setOutput("tag_name", releaseData.tag_name);
   core.setOutput("prerelease", releaseData.prerelease);
   core.setOutput("body", releaseData.body);
+  core.setOutput("publish_version", version.toPublishVersion());
+  core.setOutput("release_name", releaseData.prerelease ? "beta" : "release");
 }
