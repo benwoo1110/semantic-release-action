@@ -17,6 +17,26 @@ interface Release {
     draft: boolean
 }
 
+enum ReleaseMode {
+    prerelease,
+    release,
+    promote,
+}
+
+enum VersionBump {
+    prlabel,
+    norelease,
+    major,
+    minor,
+    patch,
+}
+
+enum VersionBumpAction {
+    Major,
+    Minor,
+    Patch,
+}
+
 class Version {
     major: number;
     minor: number;
@@ -45,7 +65,19 @@ class Version {
     isPreRelease(): boolean {
         return this.prerelease < Number.MAX_VALUE
     }
-    
+
+    isAtLeastMajorRelease(): boolean {
+        return this.isMajorRelease()
+    }
+
+    isAtLeastMinorRelease(): boolean {
+        return this.isMajorRelease() || this.isMinorRelease()
+    }
+
+    isAtLeastPatchRelease(): boolean {
+        return this.isMajorRelease() || this.isMinorRelease() || this.isPatchRelease()
+    }
+
     compare(other: Version): number {
         if (this.major > other.major) {
             return 1
@@ -85,26 +117,16 @@ class Version {
     equals(other: Version): boolean {
         return this.compare(other) === 0
     }
-}
 
-enum ReleaseMode {
-    prerelease,
-    release,
-    promote,
-}
-
-enum VersionBump {
-    prlabel,
-    norelease,
-    major,
-    minor,
-    patch,
-}
-
-enum VersionBumpAction {
-    Major,
-    Minor,
-    Patch,
+    toTag(): string {
+        if (this.isPreRelease()) {
+            if (this.prerelease === 0) {
+                return `${this.major}.${this.minor}.${this.patch}-pre`
+            }
+            return `${this.major}.${this.minor}.${this.patch}-pre.${this.prerelease}`
+        }
+        return `${this.major}.${this.minor}.${this.patch}`
+    }
 }
 
 const inputs: Inputs = {
@@ -147,10 +169,10 @@ async function main() {
     }
 
     if (releaseMode === ReleaseMode.prerelease) {
-        await prerelease()
+        await release(true)
     }
     else if (releaseMode === ReleaseMode.release) {
-        await release()
+        await release(false)
     }
     else if (releaseMode === ReleaseMode.promote) {
         await promote()
@@ -160,26 +182,7 @@ async function main() {
     }
 }
 
-async function prerelease() {
-    core.info('prerelease')
-
-    const versionBumpAction = await getVersionBumpAction()
-    if (versionBumpAction === null) {
-        core.info('No release will be created.')
-        return
-    }
-    
-    const latestRelease: Release | undefined = await getLatestRelease()
-    const latestPrerelease: Release | undefined = await getLatestPrerelease()
-
-    const releaseVersion = tagToVersion(await getLatestReleaseTag(latestRelease))
-    const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease))
-
-    core.info(`Latest release: ${JSON.stringify(releaseVersion)}`)
-    core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
-}
-
-async function release() {
+async function release(prerelease: boolean) {
     core.info('release')
 
     const versionBumpAction = await getVersionBumpAction()
@@ -196,6 +199,11 @@ async function release() {
 
     core.info(`Latest release: ${JSON.stringify(releaseVersion)}`)
     core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
+
+    const latestReleaseVersion = releaseVersion.greaterThan(prereleaseVersion) ? releaseVersion : prereleaseVersion
+    const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease)
+
+    core.info(`Next version: ${nextVersion.toTag()}`)
 }
 
 async function promote() {
@@ -219,8 +227,8 @@ async function getVersionBumpAction(): Promise<VersionBumpAction | null> {
     else if (versionBump === VersionBump.patch) {
         return VersionBumpAction.Patch
     }
-    core.error(`Unhandled version bump mode: ${versionBump}`)
-    return null
+    core.setFailed(`Unhandled version bump mode: ${versionBump}`)
+    process.exit(1)
 }
 
 async function getVersionBumpActionFromPRLabel(): Promise<VersionBumpAction | null> {
@@ -300,21 +308,89 @@ function tagToVersion(tag: string): Version {
     return new Version(major, minor, patch, prerelease)
 }
 
+function getNextVersion(version: Version, versionBumpAction: VersionBumpAction, prerelease: boolean): Version {
+    if (prerelease) {
+        if (version.isPreRelease()) {
+            return bumpFromPrereleaseToPrerelease(version, versionBumpAction)
+        }
+        return bumpFromPrereleaseToRelease(version, versionBumpAction)
+    }
+    if (version.isPreRelease()) {
+        return bumpFromReleaseToPrerelease(version, versionBumpAction)
+    }
+    return bumpFromReleaseToRelease(version, versionBumpAction)
+}
 
+function bumpFromPrereleaseToPrerelease(version: Version, versionBumpAction: VersionBumpAction): Version {
+    switch (versionBumpAction) {
+        case VersionBumpAction.Major:
+            if (version.isAtLeastMajorRelease()) {
+                return new Version(version.major, 0, 0, version.prerelease + 1)
+            }
+            return new Version(version.major + 1, 0, 0, 0)
+        case VersionBumpAction.Minor:
+            if (version.isAtLeastMinorRelease()) {
+                return new Version(version.major, version.minor, 0, version.prerelease + 1)
+            }
+            return new Version(version.major, version.minor + 1, 0, 0)
+        case VersionBumpAction.Patch:
+            if (version.isAtLeastPatchRelease()) {
+                return new Version(version.major, version.minor, version.patch, version.prerelease + 1)
+            }
+            return new Version(version.major, version.minor, version.patch + 1, 0)
+        default:
+            core.setFailed(`Unhandled version bump action: ${versionBumpAction}`)
+            process.exit(1)
+    }
+}
 
+function bumpFromPrereleaseToRelease(version: Version, versionBumpAction: VersionBumpAction): Version {
+    switch (versionBumpAction) {
+        case VersionBumpAction.Major:
+            if (version.isAtLeastMajorRelease()) {
+                return new Version(version.major, 0, 0)
+            }
+            return new Version(version.major + 1, 0, 0)
+        case VersionBumpAction.Minor:
+            if (version.isAtLeastMinorRelease()) {
+                return new Version(version.major, version.minor, 0)
+            }
+            return new Version(version.major, version.minor + 1, 0)
+        case VersionBumpAction.Patch:
+            if (version.isAtLeastPatchRelease()) {
+                return new Version(version.major, version.minor, version.patch)
+            }
+            return new Version(version.major, version.minor, version.patch + 1)
+        default:
+            core.setFailed(`Unhandled version bump action: ${versionBumpAction}`)
+            process.exit(1)
+    }
+}
 
+function bumpFromReleaseToPrerelease(version: Version, versionBumpAction: VersionBumpAction): Version {
+    switch (versionBumpAction) {
+        case VersionBumpAction.Major:
+            return new Version(version.major + 1, 0, 0, 0)
+        case VersionBumpAction.Minor:
+            return new Version(version.major, version.minor + 1, 0, 0)
+        case VersionBumpAction.Patch:
+            return new Version(version.major, version.minor, version.patch + 1, 0)
+        default:
+            core.setFailed(`Unhandled version bump action: ${versionBumpAction}`)
+            process.exit(1)
+    }
+}
 
-// async function createRelease(versionBumpAction: VersionBumpAction) {
-//     const latestRelease: Release | undefined = await getLatestRelease()
-//     const latestPrerelease: Release | undefined = await getLatestPrerelease()
-
-//     const releaseVersion = tagToVersion(await getLatestReleaseTag(latestRelease))
-//     const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease))
-
-//     core.info(`Latest release: ${JSON.stringify(releaseVersion)}`)
-//     core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
-
-//     const newReleaseVersion = new Version(0, 0, 0)
-
-//     core.info(`New release version: ${JSON.stringify(newReleaseVersion)}`)
-// }
+function bumpFromReleaseToRelease(version: Version, versionBumpAction: VersionBumpAction): Version {
+    switch (versionBumpAction) {
+        case VersionBumpAction.Major:
+            return new Version(version.major + 1, 0, 0)
+        case VersionBumpAction.Minor:
+            return new Version(version.major, version.minor + 1, 0)
+        case VersionBumpAction.Patch:
+            return new Version(version.major, version.minor, version.patch + 1)
+        default:
+            core.setFailed(`Unhandled version bump action: ${versionBumpAction}`)
+            process.exit(1)
+    }
+}

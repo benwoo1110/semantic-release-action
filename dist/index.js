@@ -2,12 +2,32 @@
 import core from "@actions/core";
 import github from "@actions/github";
 import { latestRelease, listAssociatedPullRequests, listReleases } from "./endpoints.js";
+var ReleaseMode = /* @__PURE__ */ ((ReleaseMode2) => {
+  ReleaseMode2[ReleaseMode2["prerelease"] = 0] = "prerelease";
+  ReleaseMode2[ReleaseMode2["release"] = 1] = "release";
+  ReleaseMode2[ReleaseMode2["promote"] = 2] = "promote";
+  return ReleaseMode2;
+})(ReleaseMode || {});
+var VersionBump = /* @__PURE__ */ ((VersionBump2) => {
+  VersionBump2[VersionBump2["prlabel"] = 0] = "prlabel";
+  VersionBump2[VersionBump2["norelease"] = 1] = "norelease";
+  VersionBump2[VersionBump2["major"] = 2] = "major";
+  VersionBump2[VersionBump2["minor"] = 3] = "minor";
+  VersionBump2[VersionBump2["patch"] = 4] = "patch";
+  return VersionBump2;
+})(VersionBump || {});
+var VersionBumpAction = /* @__PURE__ */ ((VersionBumpAction2) => {
+  VersionBumpAction2[VersionBumpAction2["Major"] = 0] = "Major";
+  VersionBumpAction2[VersionBumpAction2["Minor"] = 1] = "Minor";
+  VersionBumpAction2[VersionBumpAction2["Patch"] = 2] = "Patch";
+  return VersionBumpAction2;
+})(VersionBumpAction || {});
 class Version {
-  constructor(major, minor, patch, prerelease2 = Number.MAX_VALUE) {
+  constructor(major, minor, patch, prerelease = Number.MAX_VALUE) {
     this.major = major;
     this.minor = minor;
     this.patch = patch;
-    this.prerelease = prerelease2;
+    this.prerelease = prerelease;
   }
   isMajorRelease() {
     return this.minor === 0 && this.patch === 0;
@@ -20,6 +40,15 @@ class Version {
   }
   isPreRelease() {
     return this.prerelease < Number.MAX_VALUE;
+  }
+  isAtLeastMajorRelease() {
+    return this.isMajorRelease();
+  }
+  isAtLeastMinorRelease() {
+    return this.isMajorRelease() || this.isMinorRelease();
+  }
+  isAtLeastPatchRelease() {
+    return this.isMajorRelease() || this.isMinorRelease() || this.isPatchRelease();
   }
   compare(other) {
     if (this.major > other.major) {
@@ -53,27 +82,16 @@ class Version {
   equals(other) {
     return this.compare(other) === 0;
   }
+  toTag() {
+    if (this.isPreRelease()) {
+      if (this.prerelease === 0) {
+        return `${this.major}.${this.minor}.${this.patch}-pre`;
+      }
+      return `${this.major}.${this.minor}.${this.patch}-pre.${this.prerelease}`;
+    }
+    return `${this.major}.${this.minor}.${this.patch}`;
+  }
 }
-var ReleaseMode = /* @__PURE__ */ ((ReleaseMode2) => {
-  ReleaseMode2[ReleaseMode2["prerelease"] = 0] = "prerelease";
-  ReleaseMode2[ReleaseMode2["release"] = 1] = "release";
-  ReleaseMode2[ReleaseMode2["promote"] = 2] = "promote";
-  return ReleaseMode2;
-})(ReleaseMode || {});
-var VersionBump = /* @__PURE__ */ ((VersionBump2) => {
-  VersionBump2[VersionBump2["prlabel"] = 0] = "prlabel";
-  VersionBump2[VersionBump2["norelease"] = 1] = "norelease";
-  VersionBump2[VersionBump2["major"] = 2] = "major";
-  VersionBump2[VersionBump2["minor"] = 3] = "minor";
-  VersionBump2[VersionBump2["patch"] = 4] = "patch";
-  return VersionBump2;
-})(VersionBump || {});
-var VersionBumpAction = /* @__PURE__ */ ((VersionBumpAction2) => {
-  VersionBumpAction2[VersionBumpAction2["Major"] = 0] = "Major";
-  VersionBumpAction2[VersionBumpAction2["Minor"] = 1] = "Minor";
-  VersionBumpAction2[VersionBumpAction2["Patch"] = 2] = "Patch";
-  return VersionBumpAction2;
-})(VersionBumpAction || {});
 const inputs = {
   githubToken: core.getInput("github_token", { required: true }),
   repoOwner: core.getInput("repo_owner"),
@@ -109,30 +127,16 @@ async function main() {
     return;
   }
   if (releaseMode === 0 /* prerelease */) {
-    await prerelease();
+    await release(true);
   } else if (releaseMode === 1 /* release */) {
-    await release();
+    await release(false);
   } else if (releaseMode === 2 /* promote */) {
     await promote();
   } else {
     core.setFailed(`Unhandled release mode: ${releaseMode}`);
   }
 }
-async function prerelease() {
-  core.info("prerelease");
-  const versionBumpAction = await getVersionBumpAction();
-  if (versionBumpAction === null) {
-    core.info("No release will be created.");
-    return;
-  }
-  const latestRelease2 = await getLatestRelease();
-  const latestPrerelease = await getLatestPrerelease();
-  const releaseVersion = tagToVersion(await getLatestReleaseTag(latestRelease2));
-  const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease));
-  core.info(`Latest release: ${JSON.stringify(releaseVersion)}`);
-  core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`);
-}
-async function release() {
+async function release(prerelease) {
   core.info("release");
   const versionBumpAction = await getVersionBumpAction();
   if (versionBumpAction === null) {
@@ -145,6 +149,9 @@ async function release() {
   const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease));
   core.info(`Latest release: ${JSON.stringify(releaseVersion)}`);
   core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`);
+  const latestReleaseVersion = releaseVersion.greaterThan(prereleaseVersion) ? releaseVersion : prereleaseVersion;
+  const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease);
+  core.info(`Next version: ${nextVersion.toTag()}`);
 }
 async function promote() {
   core.info("promote");
@@ -162,8 +169,8 @@ async function getVersionBumpAction() {
   } else if (versionBump === 4 /* patch */) {
     return 2 /* Patch */;
   }
-  core.error(`Unhandled version bump mode: ${versionBump}`);
-  return null;
+  core.setFailed(`Unhandled version bump mode: ${versionBump}`);
+  process.exit(1);
 }
 async function getVersionBumpActionFromPRLabel() {
   const associatedPrs = await octokit.request(listAssociatedPullRequests, {
@@ -229,6 +236,88 @@ function tagToVersion(tag) {
     return new Version(major, minor, patch, Number.MAX_VALUE);
   }
   const [_, prereleaseNumber] = prePart.split(".");
-  const prerelease2 = prereleaseNumber === void 0 ? 0 : parseInt(prereleaseNumber);
-  return new Version(major, minor, patch, prerelease2);
+  const prerelease = prereleaseNumber === void 0 ? 0 : parseInt(prereleaseNumber);
+  return new Version(major, minor, patch, prerelease);
+}
+function getNextVersion(version, versionBumpAction, prerelease) {
+  if (prerelease) {
+    if (version.isPreRelease()) {
+      return bumpFromPrereleaseToPrerelease(version, versionBumpAction);
+    }
+    return bumpFromPrereleaseToRelease(version, versionBumpAction);
+  }
+  if (version.isPreRelease()) {
+    return bumpFromReleaseToPrerelease(version, versionBumpAction);
+  }
+  return bumpFromReleaseToRelease(version, versionBumpAction);
+}
+function bumpFromPrereleaseToPrerelease(version, versionBumpAction) {
+  switch (versionBumpAction) {
+    case 0 /* Major */:
+      if (version.isAtLeastMajorRelease()) {
+        return new Version(version.major, 0, 0, version.prerelease + 1);
+      }
+      return new Version(version.major + 1, 0, 0, 0);
+    case 1 /* Minor */:
+      if (version.isAtLeastMinorRelease()) {
+        return new Version(version.major, version.minor, 0, version.prerelease + 1);
+      }
+      return new Version(version.major, version.minor + 1, 0, 0);
+    case 2 /* Patch */:
+      if (version.isAtLeastPatchRelease()) {
+        return new Version(version.major, version.minor, version.patch, version.prerelease + 1);
+      }
+      return new Version(version.major, version.minor, version.patch + 1, 0);
+    default:
+      core.setFailed(`Unhandled version bump action: ${versionBumpAction}`);
+      process.exit(1);
+  }
+}
+function bumpFromPrereleaseToRelease(version, versionBumpAction) {
+  switch (versionBumpAction) {
+    case 0 /* Major */:
+      if (version.isAtLeastMajorRelease()) {
+        return new Version(version.major, 0, 0);
+      }
+      return new Version(version.major + 1, 0, 0);
+    case 1 /* Minor */:
+      if (version.isAtLeastMinorRelease()) {
+        return new Version(version.major, version.minor, 0);
+      }
+      return new Version(version.major, version.minor + 1, 0);
+    case 2 /* Patch */:
+      if (version.isAtLeastPatchRelease()) {
+        return new Version(version.major, version.minor, version.patch);
+      }
+      return new Version(version.major, version.minor, version.patch + 1);
+    default:
+      core.setFailed(`Unhandled version bump action: ${versionBumpAction}`);
+      process.exit(1);
+  }
+}
+function bumpFromReleaseToPrerelease(version, versionBumpAction) {
+  switch (versionBumpAction) {
+    case 0 /* Major */:
+      return new Version(version.major + 1, 0, 0, 0);
+    case 1 /* Minor */:
+      return new Version(version.major, version.minor + 1, 0, 0);
+    case 2 /* Patch */:
+      return new Version(version.major, version.minor, version.patch + 1, 0);
+    default:
+      core.setFailed(`Unhandled version bump action: ${versionBumpAction}`);
+      process.exit(1);
+  }
+}
+function bumpFromReleaseToRelease(version, versionBumpAction) {
+  switch (versionBumpAction) {
+    case 0 /* Major */:
+      return new Version(version.major + 1, 0, 0);
+    case 1 /* Minor */:
+      return new Version(version.major, version.minor + 1, 0);
+    case 2 /* Patch */:
+      return new Version(version.major, version.minor, version.patch + 1);
+    default:
+      core.setFailed(`Unhandled version bump action: ${versionBumpAction}`);
+      process.exit(1);
+  }
 }
