@@ -6,24 +6,88 @@ interface Inputs {
     githubToken: string
     repoOwner: string
     repoName: string
-    versionBumpMode: string
-    prerelease: boolean
+    versionBump: string
+    releaseMode: string
+    promoteFrom: string
 }
 
 interface Release {
     tag_name: string
     prerelease: boolean
     draft: boolean
-} 
-
-interface Version {
-    major: number
-    minor: number
-    patch: number
-    prerelease: number
 }
 
-enum VersionBumpMode {
+class Version {
+    major: number;
+    minor: number;
+    patch: number;
+    prerelease: number;
+
+    constructor(major: number, minor: number, patch: number, prerelease: number = Number.MAX_VALUE) {
+        this.major = major
+        this.minor = minor
+        this.patch = patch
+        this.prerelease = prerelease
+    }
+
+    isMajorRelease(): boolean {
+        return this.minor === 0 && this.patch === 0
+    }
+
+    isMinorRelease(): boolean {
+        return this.patch === 0
+    }
+
+    isPatchRelease(): boolean {
+        return this.patch > 0
+    }
+
+    isPreRelease(): boolean {
+        return this.prerelease < Number.MAX_VALUE
+    }
+    
+    compare(other: Version): number {
+        if (this.major > other.major) {
+            return 1
+        }
+        else if (this.major < other.major) {
+            return -1
+        }
+        if (this.minor > other.minor) {
+            return 1
+        }
+        else if (this.minor < other.minor) {
+            return -1
+        }
+        if (this.patch > other.patch) {
+            return 1
+        }
+        else if (this.patch < other.patch) {
+            return -1
+        }
+        if (this.prerelease > other.prerelease) {
+            return 1
+        }
+        else if (this.prerelease < other.prerelease) {
+            return -1
+        }
+        return 0
+    }
+
+    greaterThan(other: Version): boolean {
+        return this.compare(other) > 0
+    }
+
+    lessThan(other: Version): boolean {
+        return this.compare(other) < 0
+    }
+
+    equals(other: Version): boolean {
+        return this.compare(other) === 0
+    }
+}
+
+enum VersionBump {
     prlabel,
     norelease,
     major,
@@ -31,25 +95,32 @@ enum VersionBumpMode {
     patch,
 }
 
+enum ReleaseMode {
+    prerelease,
+    release,
+    promote,
+}
+
 enum VersionBumpAction {
     Major,
     Minor,
     Patch,
-    None,
 }
 
 const inputs: Inputs = {
     githubToken: core.getInput('github_token', { required: true }),
-    repoOwner: core.getInput('repo_owner', ),
+    repoOwner: core.getInput('repo_owner',),
     repoName: core.getInput('repo_name'),
-    versionBumpMode: core.getInput('version_bump_mode'),
-    prerelease: core.getBooleanInput('prerelease'),
+    versionBump: core.getInput('version_bump'),
+    releaseMode: core.getInput('release_mode', { required: true }),
+    promoteFrom: core.getInput('promote_from'),
 }
 
 const octokit = github.getOctokit(inputs.githubToken)
 const owner = inputs.repoOwner === '' ? github.context.repo.owner : inputs.repoOwner
 const repo = inputs.repoName === '' ? github.context.repo.repo : inputs.repoName
-const versionBumpMode: VersionBumpMode = VersionBumpMode[inputs.versionBumpMode.toLowerCase() as keyof typeof VersionBumpMode]
+const versionBump: VersionBump | undefined = VersionBump[inputs.versionBump.toLowerCase() as keyof typeof VersionBump]
+const releaseMode: ReleaseMode | undefined = ReleaseMode[inputs.releaseMode.toLowerCase() as keyof typeof ReleaseMode]
 
 main().catch(err => {
     console.error(err)
@@ -57,73 +128,36 @@ main().catch(err => {
 })
 
 async function main() {
-    if (versionBumpMode === undefined) {
-        core.error(`Unknown version bump mode: ${inputs.versionBumpMode}`)
-        core.error('Version bump mode must be one of: prlabel, norelease, major, minor, patch')
-        core.setFailed('Invalid version bump mode')
+    if (!releaseMode) {
+        core.setFailed(`release_mode must be one of ${Object.keys(ReleaseMode).join(', ')}.`)
         return
     }
-    
-    const versionBumpAction = await getVersionBumpAction()
-    core.info(`Version bump action: ${versionBumpAction}`)
-    createRelease(versionBumpAction)
-}
+    if (releaseMode in [ReleaseMode.release, ReleaseMode.prerelease] && versionBump === null) {
+        core.setFailed(`version_bump must be one of ${Object.keys(VersionBump).join(', ')} when release_mode is ${releaseMode}.`)
+        return
+    }
+    if (releaseMode !== ReleaseMode.promote && inputs.promoteFrom !== '') {
+        core.setFailed('promote_from was specified but release_mode was not promote. Please specify release_mode as promote.')
+        return
+    }
 
-async function getVersionBumpAction(): Promise<VersionBumpAction> {
-    if (versionBumpMode === VersionBumpMode.norelease) {
-        core.info('No release will be created.')
-        return VersionBumpAction.None
+    if (releaseMode === ReleaseMode.prerelease) {
+        await prerelease()
     }
-    else if (versionBumpMode === VersionBumpMode.prlabel) {
-        const associatedPrs: ListAssociatedPullRequests["response"] = await octokit.request(listAssociatedPullRequests, {
-            owner,
-            repo,
-            commit_sha: github.context.sha,
-        })
-        if (associatedPrs.data.length === 0) {
-            core.error('No PRs associated with this commit.')
-            return VersionBumpAction.None
-        }
-        const targetPr = associatedPrs.data[0]
-        const versionBumpActions: VersionBumpAction[] = targetPr.labels.map(label => label.name).map((label) => {
-            if (label === 'release:major') {
-                return VersionBumpAction.Major
-            } else if (label === 'release:minor') {
-                return VersionBumpAction.Minor
-            } else if (label === 'release:patch') {
-                return VersionBumpAction.Patch
-            }
-            return VersionBumpAction.None
-        }).filter((label) => label !== VersionBumpAction.None)
-
-        if (versionBumpActions.length === 0) {
-            core.error('No release labels found on the PR.')
-            return VersionBumpAction.None
-        }
-        if (versionBumpActions.length > 1) {
-            core.error('Multiple release labels found on the PR.')
-            return VersionBumpAction.None
-        }
-
-        return versionBumpActions[0]
+    else if (releaseMode === ReleaseMode.release) {
+        await release()
     }
-    else if (versionBumpMode === VersionBumpMode.major) {
-        return VersionBumpAction.Major
-    }
-    else if (versionBumpMode === VersionBumpMode.minor) {
-        return VersionBumpAction.Minor
-    }
-    else if (versionBumpMode === VersionBumpMode.patch) {
-        return VersionBumpAction.Patch
+    else if (releaseMode === ReleaseMode.promote) {
+        await promote()
     }
     else {
-        core.error(`Unhandled version bump mode: ${versionBumpMode}`)
-        return VersionBumpAction.None
+        core.setFailed(`Unhandled release mode: ${releaseMode}`)
     }
 }
 
-async function createRelease(versionBumpAction: VersionBumpAction) {
-    if (versionBumpAction === VersionBumpAction.None) {
+async function release() {
+    const versionBumpAction = await getVersionBumpAction()
+    if (versionBumpAction === null) {
         core.info('No release will be created.')
         return
     }
@@ -131,11 +165,87 @@ async function createRelease(versionBumpAction: VersionBumpAction) {
     const latestRelease: Release | undefined = await getLatestRelease()
     const latestPrerelease: Release | undefined = await getLatestPrerelease()
 
-    const latestReleaseTag = tagToVersion(await getLatestReleaseTag(latestRelease))
-    const latestPrereleaseTag = tagToVersion(await getLatestPrereleaseTag(latestPrerelease))
+    const releaseVersion = tagToVersion(await getLatestReleaseTag(latestRelease))
+    const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease))
 
-    core.info(`Latest release: ${JSON.stringify(latestReleaseTag)}`)
-    core.info(`Latest prerelease: ${JSON.stringify(latestPrereleaseTag)}`)
+    core.info(`Latest release: ${JSON.stringify(releaseVersion)}`)
+    core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
+}
+
+async function prerelease() {
+    const versionBumpAction = await getVersionBumpAction()
+    if (versionBumpAction === null) {
+        core.info('No release will be created.')
+        return
+    }
+    
+    const latestRelease: Release | undefined = await getLatestRelease()
+    const latestPrerelease: Release | undefined = await getLatestPrerelease()
+
+    const releaseVersion = tagToVersion(await getLatestReleaseTag(latestRelease))
+    const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease))
+
+    core.info(`Latest release: ${JSON.stringify(releaseVersion)}`)
+    core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
+}
+
+async function promote() {
+    core.info('promote')
+}
+
+async function getVersionBumpAction(): Promise<VersionBumpAction | null> {
+    if (versionBump === VersionBump.norelease) {
+        core.info('No release will be created.')
+        return null
+    }
+    else if (versionBump === VersionBump.prlabel) {
+        return getVersionBumpActionFromPRLabel()
+    }
+    else if (versionBump === VersionBump.major) {
+        return VersionBumpAction.Major
+    }
+    else if (versionBump === VersionBump.minor) {
+        return VersionBumpAction.Minor
+    }
+    else if (versionBump === VersionBump.patch) {
+        return VersionBumpAction.Patch
+    }
+    core.error(`Unhandled version bump mode: ${versionBump}`)
+    return null
+}
+
+async function getVersionBumpActionFromPRLabel(): Promise<VersionBumpAction | null> {
+    const associatedPrs: ListAssociatedPullRequests["response"] = await octokit.request(listAssociatedPullRequests, {
+        owner,
+        repo,
+        commit_sha: github.context.sha,
+    })
+    if (associatedPrs.data.length === 0) {
+        core.error('No PRs associated with this commit.')
+        return null
+    }
+    const targetPr = associatedPrs.data[0]
+    const versionBumpActions: (VersionBumpAction | null)[] = targetPr.labels.map(label => label.name).map((label) => {
+        if (label === 'release:major') {
+            return VersionBumpAction.Major
+        } else if (label === 'release:minor') {
+            return VersionBumpAction.Minor
+        } else if (label === 'release:patch') {
+            return VersionBumpAction.Patch
+        }
+        return null
+    }).filter((label) => label !== null)
+
+    if (versionBumpActions.length === 0) {
+        core.error('No release labels found on the PR.')
+        return null
+    }
+    if (versionBumpActions.length > 1) {
+        core.error('Multiple release labels found on the PR.')
+        return null
+    }
+
+    return versionBumpActions[0]
 }
 
 async function getLatestRelease() {
@@ -174,19 +284,28 @@ function tagToVersion(tag: string): Version {
     const [versionPart, prePart] = tag.split('-')
     const [major, minor, patch] = versionPart.split('.').map((v) => parseInt(v))
     if (prePart === undefined) {
-        return {
-            major,
-            minor,
-            patch,
-            prerelease: -1,
-        }
+        return new Version(major, minor, patch, Number.MAX_VALUE)
     }
     const [_, prereleaseNumber] = prePart.split('.')
     const prerelease = prereleaseNumber === undefined ? 0 : parseInt(prereleaseNumber)
-    return {
-        major,
-        minor,
-        patch,
-        prerelease: prerelease,
-    }
+    return new Version(major, minor, patch, prerelease)
 }
+
+
+
+
+
+// async function createRelease(versionBumpAction: VersionBumpAction) {
+//     const latestRelease: Release | undefined = await getLatestRelease()
+//     const latestPrerelease: Release | undefined = await getLatestPrerelease()
+
+//     const releaseVersion = tagToVersion(await getLatestReleaseTag(latestRelease))
+//     const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease))
+
+//     core.info(`Latest release: ${JSON.stringify(releaseVersion)}`)
+//     core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
+
+//     const newReleaseVersion = new Version(0, 0, 0)
+
+//     core.info(`New release version: ${JSON.stringify(newReleaseVersion)}`)
+// }

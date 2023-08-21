@@ -11,14 +11,16 @@ inputs:
   repo_name:
     description: 'The name of the repository'
     required: false
-  version_bump_mode:
-    description: 'The version bump to use'
+  version_bump:
+    description: 'The version bump to use. Not applicable if release_mode is promote.'
     required: false
-    default: 'prlabel'
-  prerelease:
-    description: 'Create a pre-release'
+  release_mode:
+    description: 'Type of release to perform. Can be one of: release, prerelease, promote.'
     required: false
-    default: false
+    default: 'prerelease'
+  promote_from:
+    description: 'The prerelease version to promote from. Not applicable if release_mode is not promote.'
+    required: false
 
 runs:
   using: 'node16'
