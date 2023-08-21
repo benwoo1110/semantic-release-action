@@ -88,7 +88,6 @@ class Version {
 }
 
 enum ReleaseMode {
-    none,
     prerelease,
     release,
     promote,
@@ -161,13 +160,15 @@ async function main() {
     }
 }
 
-async function release() {
+async function prerelease() {
+    core.info('prerelease')
+
     const versionBumpAction = await getVersionBumpAction()
     if (versionBumpAction === null) {
         core.info('No release will be created.')
         return
     }
-
+    
     const latestRelease: Release | undefined = await getLatestRelease()
     const latestPrerelease: Release | undefined = await getLatestPrerelease()
 
@@ -178,13 +179,15 @@ async function release() {
     core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
 }
 
-async function prerelease() {
+async function release() {
+    core.info('release')
+
     const versionBumpAction = await getVersionBumpAction()
     if (versionBumpAction === null) {
         core.info('No release will be created.')
         return
     }
-    
+
     const latestRelease: Release | undefined = await getLatestRelease()
     const latestPrerelease: Release | undefined = await getLatestPrerelease()
 

@@ -55,10 +55,9 @@ class Version {
   }
 }
 var ReleaseMode = /* @__PURE__ */ ((ReleaseMode2) => {
-  ReleaseMode2[ReleaseMode2["none"] = 0] = "none";
-  ReleaseMode2[ReleaseMode2["prerelease"] = 1] = "prerelease";
-  ReleaseMode2[ReleaseMode2["release"] = 2] = "release";
-  ReleaseMode2[ReleaseMode2["promote"] = 3] = "promote";
+  ReleaseMode2[ReleaseMode2["prerelease"] = 0] = "prerelease";
+  ReleaseMode2[ReleaseMode2["release"] = 1] = "release";
+  ReleaseMode2[ReleaseMode2["promote"] = 2] = "promote";
   return ReleaseMode2;
 })(ReleaseMode || {});
 var VersionBump = /* @__PURE__ */ ((VersionBump2) => {
@@ -101,25 +100,26 @@ async function main() {
     core.setFailed(`Invalid release_mode: ${inputs.releaseMode}. release_mode must be one of ${Object.keys(ReleaseMode).join(", ")}.`);
     return;
   }
-  if (releaseMode in [2 /* release */, 1 /* prerelease */] && versionBump === null) {
+  if (releaseMode in [1 /* release */, 0 /* prerelease */] && versionBump === null) {
     core.setFailed(`version_bump must be one of ${Object.keys(VersionBump).join(", ")} when release_mode is ${releaseMode}.`);
     return;
   }
-  if (releaseMode !== 3 /* promote */ && inputs.promoteFrom !== "") {
+  if (releaseMode !== 2 /* promote */ && inputs.promoteFrom !== "") {
     core.setFailed("promote_from was specified but release_mode was not promote. Please specify release_mode as promote.");
     return;
   }
-  if (releaseMode === 1 /* prerelease */) {
+  if (releaseMode === 0 /* prerelease */) {
     await prerelease();
-  } else if (releaseMode === 2 /* release */) {
+  } else if (releaseMode === 1 /* release */) {
     await release();
-  } else if (releaseMode === 3 /* promote */) {
+  } else if (releaseMode === 2 /* promote */) {
     await promote();
   } else {
     core.setFailed(`Unhandled release mode: ${releaseMode}`);
   }
 }
-async function release() {
+async function prerelease() {
+  core.info("prerelease");
   const versionBumpAction = await getVersionBumpAction();
   if (versionBumpAction === null) {
     core.info("No release will be created.");
@@ -132,7 +132,8 @@ async function release() {
   core.info(`Latest release: ${JSON.stringify(releaseVersion)}`);
   core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`);
 }
-async function prerelease() {
+async function release() {
+  core.info("release");
   const versionBumpAction = await getVersionBumpAction();
   if (versionBumpAction === null) {
     core.info("No release will be created.");
