@@ -137,10 +137,10 @@ async function main() {
   }
 }
 async function release(prerelease) {
-  core.info("release");
   const versionBumpAction = await getVersionBumpAction();
   if (versionBumpAction === null) {
     core.info("No release will be created.");
+    core.setOutput("release_created", false);
     return;
   }
   const latestRelease2 = await getLatestRelease();
@@ -154,6 +154,7 @@ async function release(prerelease) {
   core.info(`Next version: ${nextVersion.toTag()}`);
   const newReleaseData = await doRelease(nextVersion);
   core.info(`New release: ${JSON.stringify(newReleaseData)}`);
+  setReleaseOutputs(newReleaseData);
 }
 async function promote() {
   const targetPrerelease = inputs.promoteFrom === "" ? await getLatestPrerelease() : await getReleaseFromTag(inputs.promoteFrom);
@@ -169,6 +170,7 @@ async function promote() {
   core.info(`Next version: ${nextVersion.toTag()}`);
   const newReleaseData = await doRelease(nextVersion);
   core.info(`New release: ${JSON.stringify(newReleaseData)}`);
+  setReleaseOutputs(newReleaseData);
 }
 async function getVersionBumpAction() {
   if (versionBump === 1 /* norelease */) {
@@ -346,4 +348,10 @@ async function doRelease(version) {
     generate_release_notes: true
   });
   return release2.data;
+}
+async function setReleaseOutputs(releaseData) {
+  core.setOutput("release_created", true);
+  core.setOutput("tag_name", releaseData.tag_name);
+  core.setOutput("prerelease", releaseData.prerelease);
+  core.setOutput("body", releaseData.body);
 }
