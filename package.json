@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
+  "type": "module",
   "scripts": {
     "build": "esbuild src/index.ts --platform=node --outdir=dist",
     "lint": "eslint src/",
