@@ -104,16 +104,14 @@ async function main() {
     core.setFailed("promote_from was specified but release_mode was not promote. Please specify release_mode as promote.");
     return;
   }
-  switch (releaseMode) {
-    case 0 /* prerelease */:
-      await prerelease();
-      break;
-    case 1 /* release */:
-      await release();
-      break;
-    case 2 /* promote */:
-      await promote();
-      break;
+  if (releaseMode === 0 /* prerelease */) {
+    await prerelease();
+  } else if (releaseMode === 1 /* release */) {
+    await release();
+  } else if (releaseMode === 2 /* promote */) {
+    await promote();
+  } else {
+    core.setFailed(`Unhandled release mode: ${releaseMode}`);
   }
 }
 async function release() {
@@ -143,6 +141,7 @@ async function prerelease() {
   core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`);
 }
 async function promote() {
+  core.info("promote");
 }
 async function getVersionBumpAction() {
   if (versionBump === 1 /* norelease */) {
