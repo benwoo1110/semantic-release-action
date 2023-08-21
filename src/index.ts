@@ -171,9 +171,9 @@ function getLatestPrereleaseTag(latestPrerelease: Release | undefined): string {
 function tagToVersion(tag: string): Version {
     // release format: <major>.<minor>.<patch>
     // prerelease format: <major>.<minor>.<patch>-pre.<prerelease>
-    const [versionpart, prepart] = tag.split('-')
-    const [major, minor, patch] = versionpart.split('.').map((v) => parseInt(v))
-    if (prepart === undefined) {
+    const [versionPart, prePart] = tag.split('-')
+    const [major, minor, patch] = versionPart.split('.').map((v) => parseInt(v))
+    if (prePart === undefined) {
         return {
             major,
             minor,
@@ -181,11 +181,12 @@ function tagToVersion(tag: string): Version {
             prerelease: -1,
         }
     }
-    const [_, prerelease] = prepart.split('.')
+    const [_, prereleaseNumber] = prePart.split('.')
+    const prerelease = prereleaseNumber === undefined ? 0 : parseInt(prereleaseNumber)
     return {
         major,
         minor,
         patch,
-        prerelease: parseInt(prerelease),
+        prerelease: prerelease,
     }
 }
