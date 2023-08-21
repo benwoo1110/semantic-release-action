@@ -1,7 +1,7 @@
 "use strict";
 import core from "@actions/core";
 import github from "@actions/github";
-import { listAssociatedPullRequests } from "./endpoints.js";
+import { latestRelease, listAssociatedPullRequests, listReleases } from "./endpoints.js";
 var VersionBumpMode = /* @__PURE__ */ ((VersionBumpMode2) => {
   VersionBumpMode2[VersionBumpMode2["prlabel"] = 0] = "prlabel";
   VersionBumpMode2[VersionBumpMode2["norelease"] = 1] = "norelease";
@@ -22,8 +22,7 @@ const inputs = {
   repoOwner: core.getInput("repo_owner"),
   repoName: core.getInput("repo_name"),
   versionBumpMode: core.getInput("version_bump_mode"),
-  prerelease: core.getBooleanInput("prerelease"),
-  tagPrefix: core.getInput("tag_prefix")
+  prerelease: core.getBooleanInput("prerelease")
 };
 const octokit = github.getOctokit(inputs.githubToken);
 const owner = inputs.repoOwner === "" ? github.context.repo.owner : inputs.repoOwner;
@@ -34,12 +33,15 @@ main().catch((err) => {
   core.setFailed(err.message);
 });
 async function main() {
-  const versionBumpAction = await getVersionBumpAction();
-  if (versionBumpAction === 3 /* None */) {
-    core.info("No release will be created.");
+  if (versionBumpMode === void 0) {
+    core.error(`Unknown version bump mode: ${inputs.versionBumpMode}`);
+    core.error("Version bump mode must be one of: prlabel, norelease, major, minor, patch");
+    core.setFailed("Invalid version bump mode");
     return;
   }
+  const versionBumpAction = await getVersionBumpAction();
   core.info(`Version bump action: ${versionBumpAction}`);
+  createRelease(versionBumpAction);
 }
 async function getVersionBumpAction() {
   if (versionBumpMode === 1 /* norelease */) {
@@ -82,8 +84,64 @@ async function getVersionBumpAction() {
   } else if (versionBumpMode === 4 /* patch */) {
     return 2 /* Patch */;
   } else {
-    core.error(`Unknown version bump mode from ${inputs.versionBumpMode}: ${versionBumpMode}`);
-    core.error("Version bump mode must be one of: prlabel, norelease, major, minor, patch");
+    core.error(`Unhandled version bump mode: ${versionBumpMode}`);
     return 3 /* None */;
   }
+}
+async function createRelease(versionBumpAction) {
+  if (versionBumpAction === 3 /* None */) {
+    core.info("No release will be created.");
+    return;
+  }
+  const latestRelease2 = await getLatestRelease();
+  const latestPrerelease = await getLatestPrerelease();
+  const latestReleaseTag = tagToVersion(await getLatestReleaseTag(latestRelease2));
+  const latestPrereleaseTag = tagToVersion(await getLatestPrereleaseTag(latestPrerelease));
+  core.info(`Latest release: ${JSON.stringify(latestReleaseTag)}`);
+  core.info(`Latest prerelease: ${JSON.stringify(latestPrereleaseTag)}`);
+}
+async function getLatestRelease() {
+  const release = await octokit.request(latestRelease, {
+    owner,
+    repo
+  });
+  return release.data;
+}
+async function getLatestPrerelease() {
+  const releases = await octokit.request(listReleases, {
+    owner,
+    repo
+  });
+  return releases.data.find((release) => release.prerelease && !release.draft);
+}
+function getLatestReleaseTag(latestRelease2) {
+  if (latestRelease2 === void 0) {
+    return "0.0.0";
+  }
+  return latestRelease2.tag_name;
+}
+function getLatestPrereleaseTag(latestPrerelease) {
+  if (latestPrerelease === void 0) {
+    return "0.0.0-pre";
+  }
+  return latestPrerelease.tag_name;
+}
+function tagToVersion(tag) {
+  const [versionpart, prepart] = tag.split("-");
+  const [major, minor, patch] = versionpart.split(".").map((v) => parseInt(v));
+  if (prepart === void 0) {
+    return {
+      major,
+      minor,
+      patch,
+      prerelease: -1
+    };
+  }
+  const [_, prerelease] = prepart.split(".");
+  return {
+    major,
+    minor,
+    patch,
+    prerelease: parseInt(prerelease)
+  };
 }

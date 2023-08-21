@@ -1,6 +1,6 @@
 import core from '@actions/core'
 import github from '@actions/github'
-import { ListAssociatedPullRequests, listAssociatedPullRequests } from './endpoints.js'
+import { LatestRelease, ListAssociatedPullRequests, ListReleases, latestRelease, listAssociatedPullRequests, listReleases } from './endpoints.js'
 
 interface Inputs {
     githubToken: string
@@ -8,7 +8,19 @@ interface Inputs {
     repoName: string
     versionBumpMode: string
     prerelease: boolean
-    tagPrefix: string
+}
+
+interface Release {
+    tag_name: string
+    prerelease: boolean
+    draft: boolean
+} 
+
+interface Version {
+    major: number
+    minor: number
+    patch: number
+    prerelease: number
 }
 
 enum VersionBumpMode {
@@ -32,7 +44,6 @@ const inputs: Inputs = {
     repoName: core.getInput('repo_name'),
     versionBumpMode: core.getInput('version_bump_mode'),
     prerelease: core.getBooleanInput('prerelease'),
-    tagPrefix: core.getInput('tag_prefix'),
 }
 
 const octokit = github.getOctokit(inputs.githubToken)
@@ -46,12 +57,16 @@ main().catch(err => {
 })
 
 async function main() {
-    const versionBumpAction = await getVersionBumpAction()
-    if (versionBumpAction === VersionBumpAction.None) {
-        core.info('No release will be created.')
+    if (versionBumpMode === undefined) {
+        core.error(`Unknown version bump mode: ${inputs.versionBumpMode}`)
+        core.error('Version bump mode must be one of: prlabel, norelease, major, minor, patch')
+        core.setFailed('Invalid version bump mode')
         return
     }
+    
+    const versionBumpAction = await getVersionBumpAction()
     core.info(`Version bump action: ${versionBumpAction}`)
+    createRelease(versionBumpAction)
 }
 
 async function getVersionBumpAction(): Promise<VersionBumpAction> {
@@ -102,8 +117,75 @@ async function getVersionBumpAction(): Promise<VersionBumpAction> {
         return VersionBumpAction.Patch
     }
     else {
-        core.error(`Unknown version bump mode from ${inputs.versionBumpMode}: ${versionBumpMode}`)
-        core.error('Version bump mode must be one of: prlabel, norelease, major, minor, patch')
+        core.error(`Unhandled version bump mode: ${versionBumpMode}`)
         return VersionBumpAction.None
+    }
+}
+
+async function createRelease(versionBumpAction: VersionBumpAction) {
+    if (versionBumpAction === VersionBumpAction.None) {
+        core.info('No release will be created.')
+        return
+    }
+
+    const latestRelease: Release | undefined = await getLatestRelease()
+    const latestPrerelease: Release | undefined = await getLatestPrerelease()
+
+    const latestReleaseTag = tagToVersion(await getLatestReleaseTag(latestRelease))
+    const latestPrereleaseTag = tagToVersion(await getLatestPrereleaseTag(latestPrerelease))
+
+    core.info(`Latest release: ${JSON.stringify(latestReleaseTag)}`)
+    core.info(`Latest prerelease: ${JSON.stringify(latestPrereleaseTag)}`)
+}
+
+async function getLatestRelease() {
+    const release: LatestRelease["response"] = await octokit.request(latestRelease, {
+        owner,
+        repo,
+    })
+    return release.data
+}
+
+async function getLatestPrerelease() {
+    const releases: ListReleases["response"] = await octokit.request(listReleases, {
+        owner,
+        repo,
+    })
+    return releases.data.find((release) => release.prerelease && !release.draft)
+}
+
+function getLatestReleaseTag(latestRelease: Release | undefined): string {
+    if (latestRelease === undefined) {
+        return '0.0.0'
+    }
+    return latestRelease.tag_name
+}
+
+function getLatestPrereleaseTag(latestPrerelease: Release | undefined): string {
+    if (latestPrerelease === undefined) {
+        return '0.0.0-pre'
+    }
+    return latestPrerelease.tag_name
+}
+
+function tagToVersion(tag: string): Version {
+    // release format: <major>.<minor>.<patch>
+    // prerelease format: <major>.<minor>.<patch>-pre.<prerelease>
+    const [versionpart, prepart] = tag.split('-')
+    const [major, minor, patch] = versionpart.split('.').map((v) => parseInt(v))
+    if (prepart === undefined) {
+        return {
+            major,
+            minor,
+            patch,
+            prerelease: -1,
+        }
+    }
+    const [_, prerelease] = prepart.split('.')
+    return {
+        major,
+        minor,
+        patch,
+        prerelease: parseInt(prerelease),
     }
 }

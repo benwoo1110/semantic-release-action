@@ -19,10 +19,6 @@ inputs:
     description: 'Create a pre-release'
     required: false
     default: false
-  tag_prefix:
-    description: 'The prefix to use for the git tag'
-    required: false
-    default: ''
 
 runs:
   using: 'node16'
