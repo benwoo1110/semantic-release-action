@@ -1,7 +1,7 @@
 "use strict";
 import core from "@actions/core";
 import github from "@actions/github";
-import { listAssociatedPullRequests } from "./endpoints";
+import { listAssociatedPullRequests } from "./endpoints.js";
 var VersionBumpMode = /* @__PURE__ */ ((VersionBumpMode2) => {
   VersionBumpMode2["Major"] = "major";
   VersionBumpMode2["Minor"] = "minor";
