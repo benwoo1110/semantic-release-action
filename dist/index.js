@@ -3,11 +3,11 @@ import core from "@actions/core";
 import github from "@actions/github";
 import { listAssociatedPullRequests } from "./endpoints.js";
 var VersionBumpMode = /* @__PURE__ */ ((VersionBumpMode2) => {
-  VersionBumpMode2["Major"] = "major";
-  VersionBumpMode2["Minor"] = "minor";
-  VersionBumpMode2["Patch"] = "patch";
-  VersionBumpMode2["PRLabel"] = "prlabel";
-  VersionBumpMode2["NoRelease"] = "norelease";
+  VersionBumpMode2[VersionBumpMode2["prlabel"] = 0] = "prlabel";
+  VersionBumpMode2[VersionBumpMode2["norelease"] = 1] = "norelease";
+  VersionBumpMode2[VersionBumpMode2["major"] = 2] = "major";
+  VersionBumpMode2[VersionBumpMode2["minor"] = 3] = "minor";
+  VersionBumpMode2[VersionBumpMode2["patch"] = 4] = "patch";
   return VersionBumpMode2;
 })(VersionBumpMode || {});
 var VersionBumpAction = /* @__PURE__ */ ((VersionBumpAction2) => {
@@ -28,7 +28,7 @@ const inputs = {
 const octokit = github.getOctokit(inputs.githubToken);
 const owner = inputs.repoOwner === "" ? github.context.repo.owner : inputs.repoOwner;
 const repo = inputs.repoName === "" ? github.context.repo.repo : inputs.repoName;
-const versionBumpMode = VersionBumpMode[inputs.versionBumpMode];
+const versionBumpMode = VersionBumpMode[inputs.versionBumpMode.toLowerCase()];
 main().catch((err) => {
   console.error(err);
   core.setFailed(err.message);
@@ -42,10 +42,10 @@ async function main() {
   core.info(`Version bump action: ${versionBumpAction}`);
 }
 async function getVersionBumpAction() {
-  if (versionBumpMode === "norelease" /* NoRelease */) {
+  if (versionBumpMode === 1 /* norelease */) {
     core.info("No release will be created.");
     return 3 /* None */;
-  } else if (versionBumpMode === "prlabel" /* PRLabel */) {
+  } else if (versionBumpMode === 0 /* prlabel */) {
     const associatedPrs = await octokit.request(listAssociatedPullRequests, {
       owner,
       repo,
@@ -75,14 +75,15 @@ async function getVersionBumpAction() {
       return 3 /* None */;
     }
     return versionBumpActions[0];
-  } else if (versionBumpMode === "major" /* Major */) {
+  } else if (versionBumpMode === 2 /* major */) {
     return 0 /* Major */;
-  } else if (versionBumpMode === "minor" /* Minor */) {
+  } else if (versionBumpMode === 3 /* minor */) {
     return 1 /* Minor */;
-  } else if (versionBumpMode === "patch" /* Patch */) {
+  } else if (versionBumpMode === 4 /* patch */) {
     return 2 /* Patch */;
   } else {
-    core.error(`Unknown version bump mode: ${versionBumpMode}`);
+    core.error(`Unknown version bump mode from ${inputs.versionBumpMode}: ${versionBumpMode}`);
+    core.error("Version bump mode must be one of: prlabel, norelease, major, minor, patch");
     return 3 /* None */;
   }
 }

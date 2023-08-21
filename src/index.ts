@@ -12,11 +12,11 @@ interface Inputs {
 }
 
 enum VersionBumpMode {
-    Major = 'major',
-    Minor = 'minor',
-    Patch = 'patch',
-    PRLabel = 'prlabel',
-    NoRelease = 'norelease',
+    prlabel,
+    norelease,
+    major,
+    minor,
+    patch,
 }
 
 enum VersionBumpAction {
@@ -38,7 +38,7 @@ const inputs: Inputs = {
 const octokit = github.getOctokit(inputs.githubToken)
 const owner = inputs.repoOwner === '' ? github.context.repo.owner : inputs.repoOwner
 const repo = inputs.repoName === '' ? github.context.repo.repo : inputs.repoName
-const versionBumpMode: VersionBumpMode = VersionBumpMode[inputs.versionBumpMode as keyof typeof VersionBumpMode]
+const versionBumpMode: VersionBumpMode = VersionBumpMode[inputs.versionBumpMode.toLowerCase() as keyof typeof VersionBumpMode]
 
 main().catch(err => {
     console.error(err)
@@ -55,11 +55,11 @@ async function main() {
 }
 
 async function getVersionBumpAction(): Promise<VersionBumpAction> {
-    if (versionBumpMode === VersionBumpMode.NoRelease) {
+    if (versionBumpMode === VersionBumpMode.norelease) {
         core.info('No release will be created.')
         return VersionBumpAction.None
     }
-    else if (versionBumpMode === VersionBumpMode.PRLabel) {
+    else if (versionBumpMode === VersionBumpMode.prlabel) {
         const associatedPrs: ListAssociatedPullRequests["response"] = await octokit.request(listAssociatedPullRequests, {
             owner,
             repo,
@@ -92,17 +92,18 @@ async function getVersionBumpAction(): Promise<VersionBumpAction> {
 
         return versionBumpActions[0]
     }
-    else if (versionBumpMode === VersionBumpMode.Major) {
+    else if (versionBumpMode === VersionBumpMode.major) {
         return VersionBumpAction.Major
     }
-    else if (versionBumpMode === VersionBumpMode.Minor) {
+    else if (versionBumpMode === VersionBumpMode.minor) {
         return VersionBumpAction.Minor
     }
-    else if (versionBumpMode === VersionBumpMode.Patch) {
+    else if (versionBumpMode === VersionBumpMode.patch) {
         return VersionBumpAction.Patch
     }
     else {
-        core.error(`Unknown version bump mode: ${versionBumpMode}`)
+        core.error(`Unknown version bump mode from ${inputs.versionBumpMode}: ${versionBumpMode}`)
+        core.error('Version bump mode must be one of: prlabel, norelease, major, minor, patch')
         return VersionBumpAction.None
     }
 }
