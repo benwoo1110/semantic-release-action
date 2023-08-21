@@ -4,8 +4,7 @@ description: 'Automate the whole package release workflow with semantic-release.
 inputs:
   github_token:
     description: 'The GitHub token to use for authentication'
-    required: false
-    default: '${{ secrets.GITHUB_TOKEN }}'
+    required: true
   repo_owner:
     description: 'The owner of the repository'
     required: false
