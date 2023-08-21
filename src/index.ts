@@ -190,6 +190,7 @@ async function release(prerelease: boolean) {
     const versionBumpAction = await getVersionBumpAction()
     if (versionBumpAction === null) {
         core.info('No release will be created.')
+        core.setOutput('release_created', false)
         return
     }
 
@@ -204,10 +205,11 @@ async function release(prerelease: boolean) {
 
     const latestReleaseVersion = releaseVersion.greaterThan(prereleaseVersion) ? releaseVersion : prereleaseVersion
     const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease)
-
     core.info(`Next version: ${nextVersion.toTag()}`)
+
     const newReleaseData: Release = await doRelease(nextVersion)
     core.info(`New release: ${JSON.stringify(newReleaseData)}`)
+    setReleaseOutputs(newReleaseData)
 }
 
 async function promote() {
@@ -223,10 +225,11 @@ async function promote() {
 
     const latestPrereleaseVersion = tagToVersion(targetPrerelease.tag_name)
     const nextVersion = getNextVersion(latestPrereleaseVersion, VersionBumpAction.Patch, false)
-
     core.info(`Next version: ${nextVersion.toTag()}`)
+
     const newReleaseData: Release = await doRelease(nextVersion)
     core.info(`New release: ${JSON.stringify(newReleaseData)}`)
+    setReleaseOutputs(newReleaseData)
 }
 
 async function getVersionBumpAction(): Promise<VersionBumpAction | null> {
@@ -425,4 +428,11 @@ async function doRelease(version: Version) {
         generate_release_notes: true,
     })
     return release.data
+}
+
+async function setReleaseOutputs(releaseData: Release) {
+    core.setOutput('release_created', true)
+    core.setOutput('tag_name', releaseData.tag_name)
+    core.setOutput('prerelease', releaseData.prerelease)
+    core.setOutput('body', releaseData.body)
 }

@@ -22,6 +22,16 @@ inputs:
     description: 'The prerelease version to promote from. Not applicable if release_mode is not promote.'
     required: false
 
+outputs:
+  release_created:
+    description: 'Whether a release was created'
+  tag_name:
+    description: 'The version that was released'
+  prerelease:
+    description: 'Whether the release is a prerelease'
+  body:
+    description: 'The body of the release'
+
 runs:
   using: 'node16'
   main: 'dist/index.js'
