@@ -96,7 +96,7 @@ main().catch((err) => {
   core.setFailed(err.message);
 });
 async function main() {
-  if (!releaseMode) {
+  if (releaseMode === void 0) {
     core.setFailed(`Invalid release_mode: ${inputs.releaseMode}. release_mode must be one of ${Object.keys(ReleaseMode).join(", ")}.`);
     return;
   }

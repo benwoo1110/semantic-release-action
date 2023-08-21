@@ -133,7 +133,7 @@ main().catch(err => {
 })
 
 async function main() {
-    if (!releaseMode) {
+    if (releaseMode === undefined) {
         core.setFailed(`Invalid release_mode: ${inputs.releaseMode}. release_mode must be one of ${Object.keys(ReleaseMode).join(', ')}.`)
         return
     }
