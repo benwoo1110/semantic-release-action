@@ -1,0 +1,30 @@
+name: 'Semantic Release Action'
+description: 'Automate the whole package release workflow with semantic-release.'
+
+inputs:
+  github_token:
+    description: 'The GitHub token to use for authentication'
+    required: false
+    default: '${{ secrets.GITHUB_TOKEN }}'
+  repo_owner:
+    description: 'The owner of the repository'
+    required: false
+  repo_name:
+    description: 'The name of the repository'
+    required: false
+  version_bump_mode:
+    description: 'The version bump to use'
+    required: false
+    default: 'prlabel'
+  prerelease:
+    description: 'Create a pre-release'
+    required: false
+    default: false
+  tag_prefix:
+    description: 'The prefix to use for the git tag'
+    required: false
+    default: ''
+
+runs:
+  using: 'node16'
+  main: 'dist/index.js'
