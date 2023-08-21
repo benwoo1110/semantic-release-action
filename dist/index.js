@@ -93,7 +93,7 @@ main().catch((err) => {
 });
 async function main() {
   if (!releaseMode) {
-    core.setFailed(`release_mode must be one of ${Object.keys(ReleaseMode).join(", ")}.`);
+    core.setFailed(`Invalid release_mode: ${inputs.releaseMode}. release_mode must be one of ${Object.keys(ReleaseMode).join(", ")}.`);
     return;
   }
   if (releaseMode in [1 /* release */, 0 /* prerelease */] && versionBump === null) {
