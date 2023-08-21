@@ -1,6 +1,6 @@
 import core from '@actions/core'
 import github from '@actions/github'
-import { LatestRelease, ListAssociatedPullRequests, ListReleases, latestRelease, listAssociatedPullRequests, listReleases } from './endpoints.js'
+import { CreateRelease, LatestRelease, ListAssociatedPullRequests, ListReleases, createRelease, getReleaseByTag, latestRelease, listAssociatedPullRequests, listReleases } from './endpoints.js'
 
 interface Inputs {
     githubToken: string
@@ -15,6 +15,8 @@ interface Release {
     tag_name: string
     prerelease: boolean
     draft: boolean
+    target_commitish: string
+    body?: string | null | undefined
 }
 
 enum ReleaseMode {
@@ -194,8 +196,8 @@ async function release(prerelease: boolean) {
     const latestRelease: Release | undefined = await getLatestRelease()
     const latestPrerelease: Release | undefined = await getLatestPrerelease()
 
-    const releaseVersion = tagToVersion(await getLatestReleaseTag(latestRelease))
-    const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease))
+    const releaseVersion = getReleaseVersion(latestRelease, false)
+    const prereleaseVersion = getReleaseVersion(latestPrerelease, true)
 
     core.info(`Latest release: ${JSON.stringify(releaseVersion)}`)
     core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
@@ -204,10 +206,27 @@ async function release(prerelease: boolean) {
     const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease)
 
     core.info(`Next version: ${nextVersion.toTag()}`)
+    const newReleaseData: Release = await doRelease(nextVersion)
+    core.info(`New release: ${JSON.stringify(newReleaseData)}`)
 }
 
 async function promote() {
-    core.info('promote')
+    const targetPrerelease: Release | undefined = inputs.promoteFrom === '' ? await getLatestPrerelease() : await getReleaseFromTag(inputs.promoteFrom)
+    if (targetPrerelease === undefined) {
+        core.setFailed('No prerelease found.')
+        return
+    }
+    else if (!targetPrerelease.prerelease) {
+        core.setFailed('The specified release is not a prerelease.')
+        return
+    }
+
+    const latestPrereleaseVersion = tagToVersion(targetPrerelease.tag_name)
+    const nextVersion = getNextVersion(latestPrereleaseVersion, VersionBumpAction.Patch, false)
+
+    core.info(`Next version: ${nextVersion.toTag()}`)
+    const newReleaseData: Release = await doRelease(nextVersion)
+    core.info(`New release: ${JSON.stringify(newReleaseData)}`)
 }
 
 async function getVersionBumpAction(): Promise<VersionBumpAction | null> {
@@ -281,18 +300,20 @@ async function getLatestPrerelease() {
     return releases.data.find((release) => release.prerelease && !release.draft)
 }
 
-function getLatestReleaseTag(latestRelease: Release | undefined): string {
-    if (latestRelease === undefined) {
-        return '0.0.0'
-    }
-    return latestRelease.tag_name
+async function getReleaseFromTag(tag: string) {
+    const release: LatestRelease["response"] = await octokit.request(getReleaseByTag, {
+        owner,
+        repo,
+        tag,
+    })
+    return release.data
 }
 
-function getLatestPrereleaseTag(latestPrerelease: Release | undefined): string {
-    if (latestPrerelease === undefined) {
-        return '0.0.0-pre'
+function getReleaseVersion(latestRelease: Release | undefined, prerelease: boolean): Version {
+    if (latestRelease === undefined) {
+        return prerelease ? new Version(0, 0, 0, 0) : new Version(0, 0, 0)
     }
-    return latestPrerelease.tag_name
+    return tagToVersion(latestRelease.tag_name)
 }
 
 function tagToVersion(tag: string): Version {
@@ -393,4 +414,15 @@ function bumpFromReleaseToRelease(version: Version, versionBumpAction: VersionBu
             core.setFailed(`Unhandled version bump action: ${versionBumpAction}`)
             process.exit(1)
     }
+}
+
+async function doRelease(version: Version) {
+    const release: CreateRelease["response"] = await octokit.request(createRelease, {
+        owner,
+        repo,
+        tag_name: version.toTag(),
+        prerelease: version.isPreRelease(),
+        generate_release_notes: true,
+    })
+    return release.data
 }

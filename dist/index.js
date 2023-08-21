@@ -1,7 +1,7 @@
 "use strict";
 import core from "@actions/core";
 import github from "@actions/github";
-import { latestRelease, listAssociatedPullRequests, listReleases } from "./endpoints.js";
+import { createRelease, getReleaseByTag, latestRelease, listAssociatedPullRequests, listReleases } from "./endpoints.js";
 var ReleaseMode = /* @__PURE__ */ ((ReleaseMode2) => {
   ReleaseMode2[ReleaseMode2["prerelease"] = 0] = "prerelease";
   ReleaseMode2[ReleaseMode2["release"] = 1] = "release";
@@ -145,16 +145,30 @@ async function release(prerelease) {
   }
   const latestRelease2 = await getLatestRelease();
   const latestPrerelease = await getLatestPrerelease();
-  const releaseVersion = tagToVersion(await getLatestReleaseTag(latestRelease2));
-  const prereleaseVersion = tagToVersion(await getLatestPrereleaseTag(latestPrerelease));
+  const releaseVersion = getReleaseVersion(latestRelease2, false);
+  const prereleaseVersion = getReleaseVersion(latestPrerelease, true);
   core.info(`Latest release: ${JSON.stringify(releaseVersion)}`);
   core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`);
   const latestReleaseVersion = releaseVersion.greaterThan(prereleaseVersion) ? releaseVersion : prereleaseVersion;
   const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease);
   core.info(`Next version: ${nextVersion.toTag()}`);
+  const newReleaseData = await doRelease(nextVersion);
+  core.info(`New release: ${JSON.stringify(newReleaseData)}`);
 }
 async function promote() {
-  core.info("promote");
+  const targetPrerelease = inputs.promoteFrom === "" ? await getLatestPrerelease() : await getReleaseFromTag(inputs.promoteFrom);
+  if (targetPrerelease === void 0) {
+    core.setFailed("No prerelease found.");
+    return;
+  } else if (!targetPrerelease.prerelease) {
+    core.setFailed("The specified release is not a prerelease.");
+    return;
+  }
+  const latestPrereleaseVersion = tagToVersion(targetPrerelease.tag_name);
+  const nextVersion = getNextVersion(latestPrereleaseVersion, 2 /* Patch */, false);
+  core.info(`Next version: ${nextVersion.toTag()}`);
+  const newReleaseData = await doRelease(nextVersion);
+  core.info(`New release: ${JSON.stringify(newReleaseData)}`);
 }
 async function getVersionBumpAction() {
   if (versionBump === 1 /* norelease */) {
@@ -217,17 +231,19 @@ async function getLatestPrerelease() {
   });
   return releases.data.find((release2) => release2.prerelease && !release2.draft);
 }
-function getLatestReleaseTag(latestRelease2) {
-  if (latestRelease2 === void 0) {
-    return "0.0.0";
-  }
-  return latestRelease2.tag_name;
+async function getReleaseFromTag(tag) {
+  const release2 = await octokit.request(getReleaseByTag, {
+    owner,
+    repo,
+    tag
+  });
+  return release2.data;
 }
-function getLatestPrereleaseTag(latestPrerelease) {
-  if (latestPrerelease === void 0) {
-    return "0.0.0-pre";
+function getReleaseVersion(latestRelease2, prerelease) {
+  if (latestRelease2 === void 0) {
+    return prerelease ? new Version(0, 0, 0, 0) : new Version(0, 0, 0);
   }
-  return latestPrerelease.tag_name;
+  return tagToVersion(latestRelease2.tag_name);
 }
 function tagToVersion(tag) {
   const [versionPart, prePart] = tag.split("-");
@@ -320,4 +336,14 @@ function bumpFromReleaseToRelease(version, versionBumpAction) {
       core.setFailed(`Unhandled version bump action: ${versionBumpAction}`);
       process.exit(1);
   }
+}
+async function doRelease(version) {
+  const release2 = await octokit.request(createRelease, {
+    owner,
+    repo,
+    tag_name: version.toTag(),
+    prerelease: version.isPreRelease(),
+    generate_release_notes: true
+  });
+  return release2.data;
 }
