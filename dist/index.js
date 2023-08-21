@@ -54,6 +54,13 @@ class Version {
     return this.compare(other) === 0;
   }
 }
+var ReleaseMode = /* @__PURE__ */ ((ReleaseMode2) => {
+  ReleaseMode2[ReleaseMode2["none"] = 0] = "none";
+  ReleaseMode2[ReleaseMode2["prerelease"] = 1] = "prerelease";
+  ReleaseMode2[ReleaseMode2["release"] = 2] = "release";
+  ReleaseMode2[ReleaseMode2["promote"] = 3] = "promote";
+  return ReleaseMode2;
+})(ReleaseMode || {});
 var VersionBump = /* @__PURE__ */ ((VersionBump2) => {
   VersionBump2[VersionBump2["prlabel"] = 0] = "prlabel";
   VersionBump2[VersionBump2["norelease"] = 1] = "norelease";
@@ -62,12 +69,6 @@ var VersionBump = /* @__PURE__ */ ((VersionBump2) => {
   VersionBump2[VersionBump2["patch"] = 4] = "patch";
   return VersionBump2;
 })(VersionBump || {});
-var ReleaseMode = /* @__PURE__ */ ((ReleaseMode2) => {
-  ReleaseMode2[ReleaseMode2["prerelease"] = 0] = "prerelease";
-  ReleaseMode2[ReleaseMode2["release"] = 1] = "release";
-  ReleaseMode2[ReleaseMode2["promote"] = 2] = "promote";
-  return ReleaseMode2;
-})(ReleaseMode || {});
 var VersionBumpAction = /* @__PURE__ */ ((VersionBumpAction2) => {
   VersionBumpAction2[VersionBumpAction2["Major"] = 0] = "Major";
   VersionBumpAction2[VersionBumpAction2["Minor"] = 1] = "Minor";
@@ -85,8 +86,12 @@ const inputs = {
 const octokit = github.getOctokit(inputs.githubToken);
 const owner = inputs.repoOwner === "" ? github.context.repo.owner : inputs.repoOwner;
 const repo = inputs.repoName === "" ? github.context.repo.repo : inputs.repoName;
-const versionBump = VersionBump[inputs.versionBump.toLowerCase()];
-const releaseMode = ReleaseMode[inputs.releaseMode.toLowerCase()];
+const versionBump = VersionBump[inputs.versionBump];
+const releaseMode = ReleaseMode[inputs.releaseMode];
+core.info(`owner: ${owner}`);
+core.info(`repo: ${repo}`);
+core.info(`version_bump: ${versionBump}`);
+core.info(`release_mode: ${releaseMode}`);
 main().catch((err) => {
   console.error(err);
   core.setFailed(err.message);
@@ -96,19 +101,19 @@ async function main() {
     core.setFailed(`Invalid release_mode: ${inputs.releaseMode}. release_mode must be one of ${Object.keys(ReleaseMode).join(", ")}.`);
     return;
   }
-  if (releaseMode in [1 /* release */, 0 /* prerelease */] && versionBump === null) {
+  if (releaseMode in [2 /* release */, 1 /* prerelease */] && versionBump === null) {
     core.setFailed(`version_bump must be one of ${Object.keys(VersionBump).join(", ")} when release_mode is ${releaseMode}.`);
     return;
   }
-  if (releaseMode !== 2 /* promote */ && inputs.promoteFrom !== "") {
+  if (releaseMode !== 3 /* promote */ && inputs.promoteFrom !== "") {
     core.setFailed("promote_from was specified but release_mode was not promote. Please specify release_mode as promote.");
     return;
   }
-  if (releaseMode === 0 /* prerelease */) {
+  if (releaseMode === 1 /* prerelease */) {
     await prerelease();
-  } else if (releaseMode === 1 /* release */) {
+  } else if (releaseMode === 2 /* release */) {
     await release();
-  } else if (releaseMode === 2 /* promote */) {
+  } else if (releaseMode === 3 /* promote */) {
     await promote();
   } else {
     core.setFailed(`Unhandled release mode: ${releaseMode}`);

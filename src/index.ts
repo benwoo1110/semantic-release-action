@@ -87,18 +87,19 @@ class Version {
     }
 }
 
+enum ReleaseMode {
+    none,
+    prerelease,
+    release,
+    promote,
+}
+
 enum VersionBump {
     prlabel,
     norelease,
     major,
     minor,
     patch,
-}
-
-enum ReleaseMode {
-    prerelease,
-    release,
-    promote,
 }
 
 enum VersionBumpAction {
@@ -119,8 +120,13 @@ const inputs: Inputs = {
 const octokit = github.getOctokit(inputs.githubToken)
 const owner = inputs.repoOwner === '' ? github.context.repo.owner : inputs.repoOwner
 const repo = inputs.repoName === '' ? github.context.repo.repo : inputs.repoName
-const versionBump: VersionBump | undefined = VersionBump[inputs.versionBump.toLowerCase() as keyof typeof VersionBump]
-const releaseMode: ReleaseMode | undefined = ReleaseMode[inputs.releaseMode.toLowerCase() as keyof typeof ReleaseMode]
+const versionBump: VersionBump | undefined = VersionBump[inputs.versionBump as keyof typeof VersionBump]
+const releaseMode: ReleaseMode | undefined = ReleaseMode[inputs.releaseMode as keyof typeof ReleaseMode]
+
+core.info(`owner: ${owner}`)
+core.info(`repo: ${repo}`)
+core.info(`version_bump: ${versionBump}`)
+core.info(`release_mode: ${releaseMode}`)
 
 main().catch(err => {
     console.error(err)
