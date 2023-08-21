@@ -258,13 +258,13 @@ function tagToVersion(tag) {
   return new Version(major, minor, patch, prerelease);
 }
 function getNextVersion(version, versionBumpAction, prerelease) {
-  if (prerelease) {
-    if (version.isPreRelease()) {
+  if (version.isPreRelease()) {
+    if (prerelease) {
       return bumpFromPrereleaseToPrerelease(version, versionBumpAction);
     }
     return bumpFromPrereleaseToRelease(version, versionBumpAction);
   }
-  if (version.isPreRelease()) {
+  if (prerelease) {
     return bumpFromReleaseToPrerelease(version, versionBumpAction);
   }
   return bumpFromReleaseToRelease(version, versionBumpAction);
