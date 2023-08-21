@@ -185,8 +185,6 @@ async function main() {
 }
 
 async function release(prerelease: boolean) {
-    core.info('release')
-
     const versionBumpAction = await getVersionBumpAction()
     if (versionBumpAction === null) {
         core.info('No release will be created.')
