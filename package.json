@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --outdir=dist",
+    "build": "esbuild src/index.ts --platform=node --outdir=dist",
     "lint": "eslint src/",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
