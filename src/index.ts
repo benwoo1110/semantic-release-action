@@ -441,5 +441,5 @@ async function setReleaseOutputs(version: Version, releaseData: Release) {
     core.setOutput('prerelease', releaseData.prerelease)
     core.setOutput('body', releaseData.body)
     core.setOutput('publish_version', version.toPublishVersion())
-    core.setOutput('release_name', releaseData.prerelease ? 'beta' : 'release')
+    core.setOutput('release_type', releaseData.prerelease ? 'beta' : 'release')
 }
