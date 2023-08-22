@@ -234,7 +234,7 @@ async function promote() {
 
     const newReleaseData: Release = await doRelease(nextVersion)
     core.info(`New release: ${JSON.stringify(newReleaseData)}`)
-    setReleaseOutputs(newReleaseData)
+    setReleaseOutputs(nextVersion, newReleaseData)
 }
 
 async function getVersionBumpAction(): Promise<VersionBumpAction | null> {

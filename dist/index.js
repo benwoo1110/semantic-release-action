@@ -176,7 +176,7 @@ async function promote() {
   core.info(`Next version: ${nextVersion.toTag()}`);
   const newReleaseData = await doRelease(nextVersion);
   core.info(`New release: ${JSON.stringify(newReleaseData)}`);
-  setReleaseOutputs(newReleaseData);
+  setReleaseOutputs(nextVersion, newReleaseData);
 }
 async function getVersionBumpAction() {
   if (versionBump === 1 /* norelease */) {
