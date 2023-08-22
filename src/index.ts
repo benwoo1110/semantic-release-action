@@ -327,11 +327,12 @@ function getReleaseVersion(latestRelease: Release | undefined, prerelease: boole
 function tagToVersion(tag: string): Version {
     // release format: <major>.<minor>.<patch>
     // prerelease format: <major>.<minor>.<patch>.pre<prerelease>
-    const [major, minor, patch, pre, prerelease] = tag.split('.')
+    const [major, minor, patch, pre] = tag.split(".")
     if (pre === undefined) {
-        return new Version(parseInt(major), parseInt(minor), parseInt(patch))
+      return new Version(parseInt(major), parseInt(minor), parseInt(patch))
     }
-    return new Version(parseInt(major), parseInt(minor), parseInt(patch), prerelease === undefined ? 0 : parseInt(prerelease))
+    const prerelease = pre === 'pre' ? 0 : parseInt(pre.substring(3))
+    return new Version(parseInt(major), parseInt(minor), parseInt(patch), prerelease)
 }
 
 function getNextVersion(version: Version, versionBumpAction: VersionBumpAction, prerelease: boolean): Version {

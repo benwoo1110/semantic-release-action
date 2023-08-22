@@ -254,11 +254,12 @@ function getReleaseVersion(latestRelease2, prerelease) {
   return tagToVersion(latestRelease2.tag_name);
 }
 function tagToVersion(tag) {
-  const [major, minor, patch, pre, prerelease] = tag.split(".");
+  const [major, minor, patch, pre] = tag.split(".");
   if (pre === void 0) {
     return new Version(parseInt(major), parseInt(minor), parseInt(patch));
   }
-  return new Version(parseInt(major), parseInt(minor), parseInt(patch), prerelease === void 0 ? 0 : parseInt(prerelease));
+  const prerelease = pre === "pre" ? 0 : parseInt(pre.substring(3));
+  return new Version(parseInt(major), parseInt(minor), parseInt(patch), prerelease);
 }
 function getNextVersion(version, versionBumpAction, prerelease) {
   if (version.isPreRelease()) {
