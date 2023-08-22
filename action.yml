@@ -1,5 +1,9 @@
-name: 'Semantic Release Action'
+name: 'Advanced Semantic Release Action'
 description: 'Automate the whole package release workflow with semantic-release.'
+
+branding:
+  icon: 'package'
+  color: 'red'
 
 inputs:
   github_token:
