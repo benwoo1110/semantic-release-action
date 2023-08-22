@@ -85,9 +85,9 @@ class Version {
   toTag() {
     if (this.isPreRelease()) {
       if (this.prerelease === 0) {
-        return `${this.major}.${this.minor}.${this.patch}-pre`;
+        return `${this.major}.${this.minor}.${this.patch}.pre`;
       }
-      return `${this.major}.${this.minor}.${this.patch}-pre.${this.prerelease}`;
+      return `${this.major}.${this.minor}.${this.patch}.pre${this.prerelease}`;
     }
     return `${this.major}.${this.minor}.${this.patch}`;
   }
@@ -254,14 +254,11 @@ function getReleaseVersion(latestRelease2, prerelease) {
   return tagToVersion(latestRelease2.tag_name);
 }
 function tagToVersion(tag) {
-  const [versionPart, prePart] = tag.split("-");
-  const [major, minor, patch] = versionPart.split(".").map((v) => parseInt(v));
-  if (prePart === void 0) {
-    return new Version(major, minor, patch, Number.MAX_VALUE);
+  const [major, minor, patch, pre, prerelease] = tag.split(".");
+  if (pre === void 0) {
+    return new Version(parseInt(major), parseInt(minor), parseInt(patch));
   }
-  const [_, prereleaseNumber] = prePart.split(".");
-  const prerelease = prereleaseNumber === void 0 ? 0 : parseInt(prereleaseNumber);
-  return new Version(major, minor, patch, prerelease);
+  return new Version(parseInt(major), parseInt(minor), parseInt(patch), prerelease === void 0 ? 0 : parseInt(prerelease));
 }
 function getNextVersion(version, versionBumpAction, prerelease) {
   if (version.isPreRelease()) {

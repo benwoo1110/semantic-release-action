@@ -123,9 +123,9 @@ class Version {
     toTag(): string {
         if (this.isPreRelease()) {
             if (this.prerelease === 0) {
-                return `${this.major}.${this.minor}.${this.patch}-pre`
+                return `${this.major}.${this.minor}.${this.patch}.pre`
             }
-            return `${this.major}.${this.minor}.${this.patch}-pre.${this.prerelease}`
+            return `${this.major}.${this.minor}.${this.patch}.pre${this.prerelease}`
         }
         return `${this.major}.${this.minor}.${this.patch}`
     }
@@ -326,15 +326,12 @@ function getReleaseVersion(latestRelease: Release | undefined, prerelease: boole
 
 function tagToVersion(tag: string): Version {
     // release format: <major>.<minor>.<patch>
-    // prerelease format: <major>.<minor>.<patch>-pre.<prerelease>
-    const [versionPart, prePart] = tag.split('-')
-    const [major, minor, patch] = versionPart.split('.').map((v) => parseInt(v))
-    if (prePart === undefined) {
-        return new Version(major, minor, patch, Number.MAX_VALUE)
+    // prerelease format: <major>.<minor>.<patch>.pre<prerelease>
+    const [major, minor, patch, pre, prerelease] = tag.split('.')
+    if (pre === undefined) {
+        return new Version(parseInt(major), parseInt(minor), parseInt(patch))
     }
-    const [_, prereleaseNumber] = prePart.split('.')
-    const prerelease = prereleaseNumber === undefined ? 0 : parseInt(prereleaseNumber)
-    return new Version(major, minor, patch, prerelease)
+    return new Version(parseInt(major), parseInt(minor), parseInt(patch), prerelease === undefined ? 0 : parseInt(prerelease))
 }
 
 function getNextVersion(version: Version, versionBumpAction: VersionBumpAction, prerelease: boolean): Version {
