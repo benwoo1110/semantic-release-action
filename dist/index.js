@@ -1,7 +1,7 @@
 "use strict";
 import core from "@actions/core";
 import github from "@actions/github";
-import { createRelease, getReleaseByTag, latestRelease, listAssociatedPullRequests, listReleases } from "./endpoints.js";
+import { createRelease, getReleaseByTag, listRepositoryTags } from "./endpoints.js";
 var ReleaseMode = /* @__PURE__ */ ((ReleaseMode2) => {
   ReleaseMode2[ReleaseMode2["prerelease"] = 0] = "prerelease";
   ReleaseMode2[ReleaseMode2["release"] = 1] = "release";
@@ -149,13 +149,13 @@ async function release(prerelease) {
     core.setOutput("release_created", false);
     return;
   }
-  const latestRelease2 = await getLatestRelease();
-  const latestPrerelease = await getLatestPrerelease();
-  const releaseVersion = getReleaseVersion(latestRelease2, false);
-  const prereleaseVersion = getReleaseVersion(latestPrerelease, true);
-  core.info(`Latest release: ${JSON.stringify(releaseVersion)}`);
-  core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`);
-  const latestReleaseVersion = releaseVersion.greaterThan(prereleaseVersion) ? releaseVersion : prereleaseVersion;
+  const versions = await getRepoTags();
+  const latestReleaseVersion = findLatestVersion(versions, prerelease);
+  if (latestReleaseVersion === void 0) {
+    core.setFailed("No releases found.");
+    return;
+  }
+  core.info(`Latest release: ${JSON.stringify(latestReleaseVersion)}`);
   const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease);
   core.info(`Next version: ${nextVersion.toTag()}`);
   const newReleaseData = await doRelease(nextVersion);
@@ -163,7 +163,13 @@ async function release(prerelease) {
   setReleaseOutputs(nextVersion, newReleaseData);
 }
 async function promote() {
-  const targetPrerelease = inputs.promoteFrom === "" ? await getLatestPrerelease() : await getReleaseFromTag(inputs.promoteFrom);
+  const targetVersion = inputs.promoteFrom === "" ? findLatestVersion(await getRepoTags(), false) : tagToVersion(inputs.promoteFrom);
+  if (targetVersion === void 0) {
+    core.setFailed("No version found.");
+    return;
+  }
+  core.info(`Target version: ${targetVersion.toTag()}`);
+  const targetPrerelease = await getReleaseFromTag(targetVersion.toTag());
   if (targetPrerelease === void 0) {
     core.setFailed("No prerelease found.");
     return;
@@ -225,19 +231,13 @@ async function getVersionBumpActionFromPRLabel() {
   }
   return versionBumpActions[0];
 }
-async function getLatestRelease() {
-  const release2 = await octokit.request(latestRelease, {
+async function getRepoTags() {
+  const tags = await octokit.request(listRepositoryTags, {
     owner,
-    repo
+    repo,
+    per_page: 100
   });
-  return release2.data;
-}
-async function getLatestPrerelease() {
-  const releases = await octokit.request(listReleases, {
-    owner,
-    repo
-  });
-  return releases.data.find((release2) => release2.prerelease && !release2.draft);
+  return tags.data.map((tag) => tagToVersion(tag.name));
 }
 async function getReleaseFromTag(tag) {
   const release2 = await octokit.request(getReleaseByTag, {
@@ -247,11 +247,12 @@ async function getReleaseFromTag(tag) {
   });
   return release2.data;
 }
-function getReleaseVersion(latestRelease2, prerelease) {
-  if (latestRelease2 === void 0) {
-    return prerelease ? new Version(0, 0, 0, 0) : new Version(0, 0, 0);
+function findLatestVersion(versions, prerelease) {
+  const filteredVersions = versions.filter((version) => version.isPreRelease() === prerelease);
+  if (filteredVersions.length === 0) {
+    return void 0;
   }
-  return tagToVersion(latestRelease2.tag_name);
+  return filteredVersions.reduce((prev, current) => prev.greaterThan(current) ? prev : current);
 }
 function tagToVersion(tag) {
   const [versionPart, prePart] = tag.split("-");
@@ -259,7 +260,11 @@ function tagToVersion(tag) {
   if (prePart === void 0) {
     return new Version(major, minor, patch, Number.MAX_VALUE);
   }
-  const [_, prereleaseNumber] = prePart.split(".");
+  const [pre, prereleaseNumber] = prePart.split(".");
+  if (pre !== "pre") {
+    core.setFailed(`Invalid prerelease tag: ${tag}`);
+    process.exit(1);
+  }
   const prerelease = prereleaseNumber === void 0 ? 0 : parseInt(prereleaseNumber);
   return new Version(major, minor, patch, prerelease);
 }

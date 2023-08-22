@@ -1,6 +1,6 @@
 import core from '@actions/core'
 import github from '@actions/github'
-import { CreateRelease, LatestRelease, ListAssociatedPullRequests, ListReleases, createRelease, getReleaseByTag, latestRelease, listAssociatedPullRequests, listReleases } from './endpoints.js'
+import { CreateRelease, LatestRelease, ListAssociatedPullRequests, ListRepositoryTags, createRelease, getReleaseByTag, listRepositoryTags } from './endpoints.js'
 
 interface Inputs {
     githubToken: string
@@ -199,16 +199,14 @@ async function release(prerelease: boolean) {
         return
     }
 
-    const latestRelease: Release | undefined = await getLatestRelease()
-    const latestPrerelease: Release | undefined = await getLatestPrerelease()
+    const versions = await getRepoTags()
+    const latestReleaseVersion = findLatestVersion(versions, prerelease)
+    if (latestReleaseVersion === undefined) {
+        core.setFailed('No releases found.')
+        return
+    }
+    core.info(`Latest release: ${JSON.stringify(latestReleaseVersion)}`)
 
-    const releaseVersion = getReleaseVersion(latestRelease, false)
-    const prereleaseVersion = getReleaseVersion(latestPrerelease, true)
-
-    core.info(`Latest release: ${JSON.stringify(releaseVersion)}`)
-    core.info(`Latest prerelease: ${JSON.stringify(prereleaseVersion)}`)
-
-    const latestReleaseVersion = releaseVersion.greaterThan(prereleaseVersion) ? releaseVersion : prereleaseVersion
     const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease)
     core.info(`Next version: ${nextVersion.toTag()}`)
 
@@ -218,7 +216,15 @@ async function release(prerelease: boolean) {
 }
 
 async function promote() {
-    const targetPrerelease: Release | undefined = inputs.promoteFrom === '' ? await getLatestPrerelease() : await getReleaseFromTag(inputs.promoteFrom)
+    const targetVersion: Version | undefined = inputs.promoteFrom === '' ? findLatestVersion(await getRepoTags(), false) : tagToVersion(inputs.promoteFrom)
+    if (targetVersion === undefined) {
+        core.setFailed('No version found.')
+        return
+    }
+
+    core.info(`Target version: ${targetVersion.toTag()}`)
+
+    const targetPrerelease = await getReleaseFromTag(targetVersion.toTag())
     if (targetPrerelease === undefined) {
         core.setFailed('No prerelease found.')
         return
@@ -292,20 +298,13 @@ async function getVersionBumpActionFromPRLabel(): Promise<VersionBumpAction | nu
     return versionBumpActions[0]
 }
 
-async function getLatestRelease() {
-    const release: LatestRelease["response"] = await octokit.request(latestRelease, {
+async function getRepoTags(): Promise<Version[]> {
+    const tags: ListRepositoryTags["response"] = await octokit.request(listRepositoryTags, {
         owner,
         repo,
+        per_page: 100,
     })
-    return release.data
-}
-
-async function getLatestPrerelease() {
-    const releases: ListReleases["response"] = await octokit.request(listReleases, {
-        owner,
-        repo,
-    })
-    return releases.data.find((release) => release.prerelease && !release.draft)
+    return tags.data.map((tag) => tagToVersion(tag.name))
 }
 
 async function getReleaseFromTag(tag: string) {
@@ -317,11 +316,12 @@ async function getReleaseFromTag(tag: string) {
     return release.data
 }
 
-function getReleaseVersion(latestRelease: Release | undefined, prerelease: boolean): Version {
-    if (latestRelease === undefined) {
-        return prerelease ? new Version(0, 0, 0, 0) : new Version(0, 0, 0)
+function findLatestVersion(versions: Version[], prerelease: boolean): Version | undefined {
+    const filteredVersions = versions.filter((version) => version.isPreRelease() === prerelease)
+    if (filteredVersions.length === 0) {
+        return undefined
     }
-    return tagToVersion(latestRelease.tag_name)
+    return filteredVersions.reduce((prev, current) => prev.greaterThan(current) ? prev : current)
 }
 
 function tagToVersion(tag: string): Version {
@@ -332,7 +332,11 @@ function tagToVersion(tag: string): Version {
     if (prePart === undefined) {
         return new Version(major, minor, patch, Number.MAX_VALUE)
     }
-    const [_, prereleaseNumber] = prePart.split('.')
+    const [pre, prereleaseNumber] = prePart.split('.')
+    if (pre !== 'pre') {
+        core.setFailed(`Invalid prerelease tag: ${tag}`)
+        process.exit(1)
+    }
     const prerelease = prereleaseNumber === undefined ? 0 : parseInt(prereleaseNumber)
     return new Version(major, minor, patch, prerelease)
 }
