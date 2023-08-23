@@ -1,7 +1,7 @@
 "use strict";
 import core from "@actions/core";
 import github from "@actions/github";
-import { createRelease, getReleaseByTag, listRepositoryTags } from "./endpoints.js";
+import { createRelease, getReleaseByTag, listAssociatedPullRequests, listRepositoryTags } from "./endpoints.js";
 var ReleaseMode = /* @__PURE__ */ ((ReleaseMode2) => {
   ReleaseMode2[ReleaseMode2["prerelease"] = 0] = "prerelease";
   ReleaseMode2[ReleaseMode2["release"] = 1] = "release";

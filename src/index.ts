@@ -1,6 +1,6 @@
 import core from '@actions/core'
 import github from '@actions/github'
-import { CreateRelease, LatestRelease, ListAssociatedPullRequests, ListRepositoryTags, createRelease, getReleaseByTag, listRepositoryTags } from './endpoints.js'
+import { CreateRelease, LatestRelease, ListAssociatedPullRequests, ListRepositoryTags, createRelease, getReleaseByTag, listAssociatedPullRequests, listRepositoryTags } from './endpoints.js'
 
 interface Inputs {
     githubToken: string
