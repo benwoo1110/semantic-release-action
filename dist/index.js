@@ -150,7 +150,7 @@ async function release(prerelease) {
     return;
   }
   const versions = await getRepoTags();
-  const latestReleaseVersion = findLatestVersion(versions, prerelease);
+  const latestReleaseVersion = findLatestVersion(versions);
   if (latestReleaseVersion === void 0) {
     core.setFailed("No releases found.");
     return;
@@ -163,7 +163,7 @@ async function release(prerelease) {
   setReleaseOutputs(nextVersion, newReleaseData);
 }
 async function promote() {
-  const targetVersion = inputs.promoteFrom === "" ? findLatestVersion(await getRepoTags(), false) : tagToVersion(inputs.promoteFrom);
+  const targetVersion = inputs.promoteFrom === "" ? findLatestVersion(await getRepoTags(), true) : tagToVersion(inputs.promoteFrom);
   if (targetVersion === void 0) {
     core.setFailed("No version found.");
     return;
@@ -247,8 +247,8 @@ async function getReleaseFromTag(tag) {
   });
   return release2.data;
 }
-function findLatestVersion(versions, prerelease) {
-  const filteredVersions = versions.filter((version) => version.isPreRelease() === prerelease);
+function findLatestVersion(versions, prereleaseOnly = false) {
+  const filteredVersions = prereleaseOnly ? versions.filter((version) => version.isPreRelease()) : versions;
   if (filteredVersions.length === 0) {
     return void 0;
   }

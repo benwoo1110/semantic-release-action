@@ -200,7 +200,7 @@ async function release(prerelease: boolean) {
     }
 
     const versions = await getRepoTags()
-    const latestReleaseVersion = findLatestVersion(versions, prerelease)
+    const latestReleaseVersion = findLatestVersion(versions)
     if (latestReleaseVersion === undefined) {
         core.setFailed('No releases found.')
         return
@@ -216,7 +216,7 @@ async function release(prerelease: boolean) {
 }
 
 async function promote() {
-    const targetVersion: Version | undefined = inputs.promoteFrom === '' ? findLatestVersion(await getRepoTags(), false) : tagToVersion(inputs.promoteFrom)
+    const targetVersion: Version | undefined = inputs.promoteFrom === '' ? findLatestVersion(await getRepoTags(), true) : tagToVersion(inputs.promoteFrom)
     if (targetVersion === undefined) {
         core.setFailed('No version found.')
         return
@@ -316,8 +316,8 @@ async function getReleaseFromTag(tag: string) {
     return release.data
 }
 
-function findLatestVersion(versions: Version[], prerelease: boolean): Version | undefined {
-    const filteredVersions = versions.filter((version) => version.isPreRelease() === prerelease)
+function findLatestVersion(versions: Version[], prereleaseOnly: boolean = false): Version | undefined {
+    const filteredVersions = prereleaseOnly ? versions.filter((version) => version.isPreRelease()) : versions
     if (filteredVersions.length === 0) {
         return undefined
     }
