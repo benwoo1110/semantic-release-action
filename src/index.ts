@@ -46,10 +46,10 @@ class Version {
     prerelease: number;
 
     constructor(major: number, minor: number, patch: number, prerelease: number = Number.MAX_VALUE) {
-        this.major = major
-        this.minor = minor
-        this.patch = patch
-        this.prerelease = prerelease
+        this.major = major ? major : 0
+        this.minor = minor ? minor : 0
+        this.patch = patch ? patch : 0
+        this.prerelease = prerelease ? prerelease : 0
     }
 
     isMajorRelease(): boolean {
@@ -321,10 +321,6 @@ function findLatestVersion(versions: Version[], prereleaseOnly: boolean = false)
     if (filteredVersions.length === 0) {
         return undefined
     }
-    for (let i = 0; i < filteredVersions.length - 1; i++) {
-        core.info(`Comparing ${filteredVersions[i].toTag()} with ${filteredVersions[i + 1].toTag()} result: ${filteredVersions[i].greaterThan(filteredVersions[i + 1]) ? 'true' : 'false'}`)
-    }
-
     return filteredVersions.reduce((prev, current) => prev.greaterThan(current) ? prev : current)
 }
 

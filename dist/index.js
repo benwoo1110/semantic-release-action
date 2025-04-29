@@ -24,10 +24,10 @@ var VersionBumpAction = /* @__PURE__ */ ((VersionBumpAction2) => {
 })(VersionBumpAction || {});
 class Version {
   constructor(major, minor, patch, prerelease = Number.MAX_VALUE) {
-    this.major = major;
-    this.minor = minor;
-    this.patch = patch;
-    this.prerelease = prerelease;
+    this.major = major ? major : 0;
+    this.minor = minor ? minor : 0;
+    this.patch = patch ? patch : 0;
+    this.prerelease = prerelease ? prerelease : 0;
   }
   isMajorRelease() {
     return this.minor === 0 && this.patch === 0;
@@ -251,9 +251,6 @@ function findLatestVersion(versions, prereleaseOnly = false) {
   const filteredVersions = prereleaseOnly ? versions.filter((version) => version.isPreRelease()) : versions;
   if (filteredVersions.length === 0) {
     return void 0;
-  }
-  for (let i = 0; i < filteredVersions.length - 1; i++) {
-    core.info(`Comparing ${filteredVersions[i].toTag()} with ${filteredVersions[i + 1].toTag()} result: ${filteredVersions[i].greaterThan(filteredVersions[i + 1]) ? "true" : "false"}`);
   }
   return filteredVersions.reduce((prev, current) => prev.greaterThan(current) ? prev : current);
 }
