@@ -155,6 +155,7 @@ async function release(prerelease) {
     core.setFailed("No releases found.");
     return;
   }
+  core.info(`Releases: ${JSON.stringify(versions)}`);
   core.info(`Latest release: ${JSON.stringify(latestReleaseVersion)}`);
   const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease);
   core.info(`Next version: ${nextVersion.toTag()}`);

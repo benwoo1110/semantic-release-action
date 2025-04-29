@@ -205,6 +205,7 @@ async function release(prerelease: boolean) {
         core.setFailed('No releases found.')
         return
     }
+    core.info(`Releases: ${JSON.stringify(versions)}`)
     core.info(`Latest release: ${JSON.stringify(latestReleaseVersion)}`)
 
     const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease)
