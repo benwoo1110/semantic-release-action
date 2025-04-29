@@ -155,7 +155,6 @@ async function release(prerelease) {
     core.setFailed("No releases found.");
     return;
   }
-  core.info(`Releases: ${JSON.stringify(versions)}`);
   core.info(`Latest release: ${JSON.stringify(latestReleaseVersion)}`);
   const nextVersion = getNextVersion(latestReleaseVersion, versionBumpAction, prerelease);
   core.info(`Next version: ${nextVersion.toTag()}`);
@@ -252,6 +251,9 @@ function findLatestVersion(versions, prereleaseOnly = false) {
   const filteredVersions = prereleaseOnly ? versions.filter((version) => version.isPreRelease()) : versions;
   if (filteredVersions.length === 0) {
     return void 0;
+  }
+  for (let i = 0; i < filteredVersions.length - 1; i++) {
+    core.info(`Comparing ${filteredVersions[i].toTag()} with ${filteredVersions[i + 1].toTag()} result: ${filteredVersions[i].greaterThan(filteredVersions[i + 1]) ? "true" : "false"}`);
   }
   return filteredVersions.reduce((prev, current) => prev.greaterThan(current) ? prev : current);
 }
